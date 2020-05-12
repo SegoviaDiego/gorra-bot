@@ -36,3 +36,5 @@ lerna-debug.log*
 # Lockfiles
 yarn.lock
 package-lock.json
+
+.now
