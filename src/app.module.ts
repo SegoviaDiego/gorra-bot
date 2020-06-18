@@ -1,15 +1,22 @@
-import { Module } from '@nestjs/common';
+import { MorganMiddleware } from '@nest-middlewares/morgan';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { SlackWebhookConfig } from './slack-webhook/slack-webhook.config';
+import { SlackWebhookModule } from './slack-webhook/slack-webhook.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+      ignoreEnvFile: process.env.NODE_ENV === 'production'
+    }),
     MongooseModule.forRootAsync({
-      useFactory: async () => {
+      useFactory: async (config: ConfigService) => {
         if (process.env.NODE_ENV === 'production') {
           return {
-            uri: process.env.MONGO_URI,
+            uri: config.get('MONGO_URI'),
             useNewUrlParser: true
           };
         } else {
@@ -22,10 +29,19 @@ import { AppService } from './app.service';
 
           return { uri };
         }
-      }
+      },
+      inject: [ConfigService]
+    }),
+    SlackWebhookModule.forRoot({
+      useFactory: (config: ConfigService) =>
+        new SlackWebhookConfig(config.get<string>('SLACK_TOKEN')!),
+      inject: [ConfigService]
     })
-  ],
-  controllers: [AppController],
-  providers: [AppService]
+  ]
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  public configure(consumer: MiddlewareConsumer): any {
+    MorganMiddleware.configure('combined');
+    consumer.apply(MorganMiddleware).forRoutes('/');
+  }
+}
